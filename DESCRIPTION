@@ -1,0 +1,13 @@
+Package: flumeTracer
+Type: Package
+Title: Simulate a Conservative Tracer Release in an Annular Flume
+Version: 0.1.0
+Author: Geoffrey Poole
+Maintainer: Geoffrey Poole <gpoole@montana.edu>
+Description: Simulates hyporheic exchange in an annular flume and produces an expected concentration of a conservative tracer.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Depends: R (>= 3.5.0)
+Imports: hydrogeom, purrr
+RoxygenNote: 7.1.2
