@@ -29,7 +29,7 @@ simulateFlumeConcentration(m)
   \item{\code{C_c} the initial channel (surface water) concentration
   immediately following the slug release}
 
-  \item{\code{C_h} the initial hyporehic water concentration (eqaul to
+  \item{\code{C_h} the initial hyporheic water concentration (equal to
   concentration prior to the release)}
 
   \item{\code{V} the total water volume in the flume}
@@ -65,7 +65,7 @@ As a side effect, the following values are added to the environment \code{m}:
 Also, \code{C_c} is converted to a time series of length \code{nTimes}.
 }
 \description{
-Simulates conservative tracer concentration in an annular flume follows a
+Simulates conservative tracer concentration in an annular flume following a
 slug release.
 }
 \details{

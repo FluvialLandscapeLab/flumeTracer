@@ -1,6 +1,6 @@
 #' Model a flume tracer release.
 #'
-#' Simulates conservative tracer concentration in an annular flume follows a
+#' Simulates conservative tracer concentration in an annular flume following a
 #' slug release.
 #'
 #' Uses and implicit solver to estimate flume channel water concentration at
@@ -60,7 +60,7 @@
 #'   \item{\code{C_c} the initial channel (surface water) concentration
 #'   immediately following the slug release}
 #'
-#'   \item{\code{C_h} the initial hyporehic water concentration (eqaul to
+#'   \item{\code{C_h} the initial hyporheic water concentration (equal to
 #'   concentration prior to the release)}
 #'
 #'   \item{\code{V} the total water volume in the flume}
@@ -131,7 +131,7 @@ simulateFlumeConcentration = function(m) {
   m$times = seq(0, m$duration, length.out = m$nIterations+1)
   m$nTimes = length(m$times)
 
-  # Expected final concentraion.
+  # Expected final concentration.
   m$V_c = m$V - m$V_h
   m$C_final = (m$C_c*m$V_c + m$C_h*m$V_h) / m$V
 
@@ -167,7 +167,7 @@ simulateFlumeConcentration = function(m) {
 #'
 #' When the sum of the integrals of these functions are divided by the integral
 #' of the washout function (W(tau)) from tau_0 to tau_n, the resulting value is
-#' the mean concentration the hyporehic water.  See
+#' the mean concentration the hyporheic water.  See
 #' \code{\link{optimizationError}} for details.
 #'
 #' @param tau A vector of water ages for which remaining-flow-weighted
@@ -240,12 +240,13 @@ C_hIntegrandStaticC = function(tau, m) {
 #'   the current simulation time to tau_n, or zero if current simulation time is
 #'   greater than tau_n.
 #' @export
-optimizationError = function(C_c, m, breaks, staticIntegral) {
+optimizationError <- function(C_c, m, breaks, staticIntegral) {
   # set the current channel concentration equal to the estimate.
   m$C_c[m$idx] = C_c
   # determine what the current hyporheic concentration would be given the
   # estimate of C_c
-  C_h = (staticIntegral + pIntegrate(C_hIntegrandDynamicC, breaks, t = m$times[m$idx], m = m)$value) / powerLawIntCCDF(m$tau_0, m$tau_n, m$tau_0, m$tau_n, m$alpha)
+  C_h = (staticIntegral + pIntegrate(C_hIntegrandDynamicC, breaks, t = m$times[m$idx], m = m)$value) /
+    powerLawIntCCDF(m$tau_0, m$tau_n, m$tau_0, m$tau_n, m$alpha)
   # determine the error -- post release, the weighted mean of hyporheic conc and
   # channel conc should at all times be equal to final conc.
   ((C_h*m$V_h + C_c*m$V_c)/m$V - m$C_final)^2

@@ -52,6 +52,6 @@ remaining in the hyporheic zone at water age tau).
 \details{
 When the sum of the integrals of these functions are divided by the integral
 of the washout function (W(tau)) from tau_0 to tau_n, the resulting value is
-the mean concentration the hyporehic water.  See
+the mean concentration the hyporheic water.  See
 \code{\link{optimizationError}} for details.
 }
