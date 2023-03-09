@@ -46,16 +46,16 @@
 #'
 #'   \item{\code{duration} the total duration of the simulation}
 #'
-#'
 #'   \item{\code{tau_0} the minimum water age in the hyporheic zone}
-#'
 #'
 #'   \item{\code{tau_n} the maximum water age in the hyporheic zone}
 #'
+#'   \item{\code{shape} either "powerLaw" or "exponent" depending on the desired
+#'   shape of the washout function.}
 #'
-#'   \item{\code{alpha} the exponent of the power law representing the water age
-#'   of hyporehic discharge. (Use a positive value.  This value is negated
-#'   within the model code...)}
+#'   \item{\code{alpha} or \code{sigma} the exponent for shape "powerLaw"
+#'   (\code{alpha} -- use a positive value. This value is negated within the
+#'   model code...) or the decay rate (\code{sigma}) for shape "exponent".}
 #'
 #'   \item{\code{C_c} the initial channel (surface water) concentration
 #'   immediately following the slug release}
@@ -115,7 +115,8 @@
 #' m$duration = 60 #hours
 
 #' # Water age parameters
-#' m$alpha = 1.7
+#' m$shape = "powerLaw"
+#' m$alpha = 1.4
 #' m$tau_0 = 1/3600 #1 second
 #' m$tau_n = 60
 
@@ -138,40 +139,70 @@
 #' # Estimate of accuracy; smaller is better...
 #' tail(m$C_c, 1) - m$C_final
 #' @import hydrogeom
-#' @importFrom purrr transpose
+#' @importFrom purrr list_transpose
 #' @importFrom stats approx integrate nlm
 #' @export
 simulateFlumeConcentration = function(m, debug = F) {
-  m$nIterations = m$duration/m$timestep
-  m$times = seq(0, m$duration, length.out = m$nIterations+1)
-  m$nTimes = length(m$times)
+
+  # set up some values in the environment
+  m$nIterations <- m$duration/m$timestep
+  m$times <- seq(0, m$duration, length.out = m$nIterations+1)
+  m$nTimes <- length(m$times)
 
   # Expected final concentration.
-  m$V_c = m$V - m$V_h
-  m$C_final = (m$C_c*m$V_c + m$C_h*m$V_h) / m$V
-
+  m$V_c <- m$V - m$V_h
+  m$C_final <- (m$C_c*m$V_c + m$C_h*m$V_h) / m$V
   m$C_c = rep(m$C_c, length(m$times))
+
+  # get the functions associated with shape
+  m$CCDF <- getFunction(paste0(m$shape, "CCDF"))
+  m$IntCCDF <- getFunction(paste0(m$shape, "IntCCDF"))
+
+  # copy "alpha" or "sigma" to shapeParam depending on "shape"
+  CCDFFormals <- names(formals(m$CCDF))
+  m$shapeParam <- get(CCDFFormals[length(CCDFFormals)], envir = m)
 
   #   index 1 when is t=0.  We already have all values for t=0, so we start
   # calculations with index 2.
   for(idx in 2:m$nTimes) {
-    m$idx = idx
-    preReleaseBreaks = logDistributedBreaks(min(m$times[idx], m$tau_n), m$tau_n, m$nSubdiv)
-    pastPostReleaseBreaks = logDistributedBreaks(m$timestep, min(m$times[idx], m$tau_n), m$nSubdiv)
-    recentPostReleaseBreaks = logDistributedBreaks(m$tau_0, m$timestep, m$nSubdiv)
+    m$idx <- idx
 
-    preReleaseIntegral <- pIntegrate(C_hIntegrandStaticC, preReleaseBreaks, m = m)
-    pastPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, pastPostReleaseBreaks, t = m$times[m$idx], m = m)
-
-    if(debug) {
-      m$debug = c(
-        m$debug,
-        c(list(type = "preRelease", ittr = idx), preReleaseIntegral),
-        c(list(type = "pastPostRelease", ittr = idx), pastPostReleaseIntegral)
-      )
+    # calculate the integral for any t-tau that is less than zero. (this is
+    # constant for the time step)
+    if(m$times[idx] > m$tau_n) {
+      preReleaseIntegral <- list(value = 0)
+    } else {
+      preReleaseBreaks <- logDistributedBreaks(min(m$times[idx], m$tau_n), m$tau_n, m$nSubdiv)
+      preReleaseIntegral <- pIntegrate(C_hIntegrandStaticC, preReleaseBreaks, m = m)
+      if(debug) {
+        m$debug = c(
+          m$debug,
+          c(list(type = "preRelease", ittr = idx), preReleaseIntegral)
+        )
+      }
     }
 
-    m$C_c[idx] =
+    # calculate integral for any t-tau that is between zero and last time step
+    # (this is constant for the time step)
+    if(idx == 2) {
+      pastPostReleaseIntegral <- list(value = 0)
+    } else {
+      pastPostReleaseBreaks <- logDistributedBreaks(m$timestep, min(m$times[idx], m$tau_n), m$nSubdiv)
+      pastPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, pastPostReleaseBreaks, t = m$times[m$idx], m = m)
+      if(debug) {
+        m$debug <- c(
+          m$debug,
+          c(list(type = "pastPostRelease", ittr = idx), pastPostReleaseIntegral)
+        )
+      }
+    }
+
+    # calculate breaks for the "recent" interval (between last and current time
+    # step, which needs to be optimized)
+    recentPostReleaseBreaks <- logDistributedBreaks(m$tau_0, m$timestep, m$nSubdiv)
+
+    # calculate the new concentration by descending on solution
+    m$C_c[idx] <-
       nlm(
         optimizationError,
         m$C_c[idx-1],
@@ -182,6 +213,10 @@ simulateFlumeConcentration = function(m, debug = F) {
         debug = debug
       )$estimate
   }
+
+  # get rid of a few confusing things in the model environment.
+  rm(list = c("CCDF", "IntCCDF", "shapeParam"), envir = m)
+
   TRUE
 }
 
@@ -227,14 +262,14 @@ simulateFlumeConcentration = function(m, debug = F) {
 #'   \code{min(current model time, tau_n)}.
 #' @export
 C_hIntegrandDynamicC = function(tau, t, m){
-  powerLawCCDF(tau, m$tau_0, m$tau_n, m$alpha) * approx(m$times[1:length(m$C_c)], m$C_c, t-tau)$y #* e^(m$k_h*tau)
+  m$CCDF(tau, m$tau_0, m$tau_n, m$shapeParam) * approx(m$times[1:length(m$C_c)], m$C_c, t-tau)$y #* e^(m$k_h*tau)
 }
 
 #' @rdname  C_hIntegrandDynamicC
 #' @export
 C_hIntegrandStaticC = function(tau, m) {
   # m$C_h[1] is the concentration prior to release
-  powerLawCCDF(tau, m$tau_0, m$tau_n, m$alpha) * m$C_h[1] #* e^(m$k_h*tau)
+  m$CCDF(tau, m$tau_0, m$tau_n, m$shapeParam) * m$C_h[1] #* e^(m$k_h*tau)
 }
 
 
@@ -257,7 +292,7 @@ C_hIntegrandStaticC = function(tau, m) {
 #'   Values are generated by nlm() to minimim the return value of
 #'   \code{optimizationError}.
 #' @param m The model environment, which must contain variables \code{tau_0,
-#'   tau_n, alpha, idx, times,} and \code{C_c}.  \code{idx} is used as a vector
+#'   tau_n, alpha} or \code{sigma} (depending on "shape), \code{idx, times,} and \code{C_c}.  \code{idx} is used as a vector
 #'   index, and points at values associated with the current model time.
 #'   \code{idx} = (current model iteration + 1), because \code{t=0} is
 #'   associated with \code{idx=1}.  \code{times} is a vector of simulation times
@@ -276,7 +311,7 @@ optimizationError <- function(C_c, m, breaks, staticIntegral, pastDynamicIntegra
   # estimate of C_c
   recentPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, breaks, t = m$times[m$idx], m = m)
   C_h = (staticIntegral + pastDynamicIntegral + recentPostReleaseIntegral$value) /
-    powerLawIntCCDF(m$tau_0, m$tau_n, m$tau_0, m$tau_n, m$alpha)
+    m$IntCCDF(m$tau_0, m$tau_n, m$tau_0, m$tau_n, m$shapeParam)
   # determine the error -- post release, the weighted mean of hyporheic conc and
   # channel conc should at all times be equal to final conc.
   result <- ((C_h*m$V_h + C_c*m$V_c)/m$V - m$C_final)^2
@@ -286,7 +321,7 @@ optimizationError <- function(C_c, m, breaks, staticIntegral, pastDynamicIntegra
 
 # Generate a ln()-distributed sequence from tau_0 to tau_n
 logDistributedBreaks = function(tau_0, tau_n, nBins){
-  exp(seq(log(tau_0), log(tau_n), length.out = nBins+1))
+  exp(seq(log(tau_0 + 1), log(tau_n + 1), length.out = nBins+1)) - 1
 }
 
 #' Numerical integration with manual subdivisons.

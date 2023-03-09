@@ -15,16 +15,16 @@ simulateFlumeConcentration(m, debug = F)
 
   \item{\code{duration} the total duration of the simulation}
 
-
   \item{\code{tau_0} the minimum water age in the hyporheic zone}
-
 
   \item{\code{tau_n} the maximum water age in the hyporheic zone}
 
+  \item{\code{shape} either "powerLaw" or "exponent" depending on the desired
+  shape of the washout function.}
 
-  \item{\code{alpha} the exponent of the power law representing the water age
-  of hyporehic discharge. (Use a positive value.  This value is negated
-  within the model code...)}
+  \item{\code{alpha} or \code{sigma} the exponent for shape "powerLaw"
+  (\code{alpha} -- use a positive value. This value is negated within the
+  model code...) or the decay rate (\code{sigma}) for shape "exponent".}
 
   \item{\code{C_c} the initial channel (surface water) concentration
   immediately following the slug release}
@@ -128,7 +128,8 @@ m = new.env()
 m$timestep = 0.5
 m$duration = 60 #hours
 # Water age parameters
-m$alpha = 1.7
+m$shape = "powerLaw"
+m$alpha = 1.4
 m$tau_0 = 1/3600 #1 second
 m$tau_n = 60
 # Initial concentrations and volumes in channel and hyporheic zone.
