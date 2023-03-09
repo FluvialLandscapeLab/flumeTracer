@@ -4,7 +4,7 @@
 \alias{optimizationError}
 \title{Determine error associated with an estimate of channel concentration.}
 \usage{
-optimizationError(C_c, m, breaks, staticIntegral)
+optimizationError(C_c, m, breaks, staticIntegral, pastDynamicIntegral)
 }
 \arguments{
 \item{C_c}{An estimate of channel concentration in the next model time step.

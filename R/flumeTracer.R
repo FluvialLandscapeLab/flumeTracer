@@ -135,22 +135,27 @@ simulateFlumeConcentration = function(m) {
   m$V_c = m$V - m$V_h
   m$C_final = (m$C_c*m$V_c + m$C_h*m$V_h) / m$V
 
+  m$C_c = rep(m$C_c, length(m$times))
+
   #   index 1 when is t=0.  We already have all values for t=0, so we start
   # calculations with index 2.
   for(idx in 2:m$nTimes) {
     m$idx = idx
+    preReleaseBreaks = logDistributedBreaks(min(m$times[idx], m$tau_n), m$tau_n, m$nSubdiv)
+    pastPostReleaseBreaks = logDistributedBreaks(m$timestep, min(m$times[idx], m$tau_n), m$nSubdiv)
+    recentPostReleaseBreaks = logDistributedBreaks(m$tau_0, m$timestep, m$nSubdiv)
+
+    preReleaseIntegral <- pIntegrate(C_hIntegrandStaticC, preReleaseBreaks, m = m)$value
+    pastPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, pastPostReleaseBreaks, t = m$times[m$idx], m = m)$value
+
     m$C_c[idx] =
       nlm(
         optimizationError,
         m$C_c[idx-1],
         m = m,
-        breaks = logDistributedBreaks(m$tau_0, min(m$times[idx], m$tau_n), m$nSubdiv),
-        staticIntegral =
-          ifelse(
-            m$times[idx] < m$tau_n,
-            pIntegrate(C_hIntegrandStaticC, logDistributedBreaks(m$times[idx], m$tau_n, m$nSubdiv), m = m)$value,
-            0
-          )
+        breaks = recentPostReleaseBreaks,
+        staticIntegral = preReleaseIntegral,
+        pastDynamicIntegral = pastPostReleaseIntegral
       )$estimate
   }
   TRUE
@@ -240,12 +245,12 @@ C_hIntegrandStaticC = function(tau, m) {
 #'   the current simulation time to tau_n, or zero if current simulation time is
 #'   greater than tau_n.
 #' @export
-optimizationError <- function(C_c, m, breaks, staticIntegral) {
+optimizationError <- function(C_c, m, breaks, staticIntegral, pastDynamicIntegral) {
   # set the current channel concentration equal to the estimate.
-  m$C_c[m$idx] = C_c
+  m$C_c[m$idx] <- C_c
   # determine what the current hyporheic concentration would be given the
   # estimate of C_c
-  C_h = (staticIntegral + pIntegrate(C_hIntegrandDynamicC, breaks, t = m$times[m$idx], m = m)$value) /
+  C_h = (staticIntegral + pastDynamicIntegral + pIntegrate(C_hIntegrandDynamicC, breaks, t = m$times[m$idx], m = m)$value) /
     powerLawIntCCDF(m$tau_0, m$tau_n, m$tau_0, m$tau_n, m$alpha)
   # determine the error -- post release, the weighted mean of hyporheic conc and
   # channel conc should at all times be equal to final conc.
