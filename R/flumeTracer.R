@@ -126,7 +126,7 @@
 #' @importFrom purrr transpose
 #' @importFrom stats approx integrate nlm
 #' @export
-simulateFlumeConcentration = function(m) {
+simulateFlumeConcentration = function(m, debug = F) {
   m$nIterations = m$duration/m$timestep
   m$times = seq(0, m$duration, length.out = m$nIterations+1)
   m$nTimes = length(m$times)
@@ -145,8 +145,16 @@ simulateFlumeConcentration = function(m) {
     pastPostReleaseBreaks = logDistributedBreaks(m$timestep, min(m$times[idx], m$tau_n), m$nSubdiv)
     recentPostReleaseBreaks = logDistributedBreaks(m$tau_0, m$timestep, m$nSubdiv)
 
-    preReleaseIntegral <- pIntegrate(C_hIntegrandStaticC, preReleaseBreaks, m = m)$value
-    pastPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, pastPostReleaseBreaks, t = m$times[m$idx], m = m)$value
+    preReleaseIntegral <- pIntegrate(C_hIntegrandStaticC, preReleaseBreaks, m = m)
+    pastPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, pastPostReleaseBreaks, t = m$times[m$idx], m = m)
+
+    if(debug) {
+      m$debug = c(
+        m$debug,
+        c(list(type = "preRelease", ittr = idx), preReleaseIntegral),
+        c(list(type = "pastPostRelease", ittr = idx), pastPostReleaseIntegral)
+      )
+    }
 
     m$C_c[idx] =
       nlm(
@@ -154,8 +162,9 @@ simulateFlumeConcentration = function(m) {
         m$C_c[idx-1],
         m = m,
         breaks = recentPostReleaseBreaks,
-        staticIntegral = preReleaseIntegral,
-        pastDynamicIntegral = pastPostReleaseIntegral
+        staticIntegral = preReleaseIntegral$value,
+        pastDynamicIntegral = pastPostReleaseIntegral$value,
+        debug = debug
       )$estimate
   }
   TRUE
@@ -245,16 +254,19 @@ C_hIntegrandStaticC = function(tau, m) {
 #'   the current simulation time to tau_n, or zero if current simulation time is
 #'   greater than tau_n.
 #' @export
-optimizationError <- function(C_c, m, breaks, staticIntegral, pastDynamicIntegral) {
+optimizationError <- function(C_c, m, breaks, staticIntegral, pastDynamicIntegral, debug = F) {
   # set the current channel concentration equal to the estimate.
   m$C_c[m$idx] <- C_c
   # determine what the current hyporheic concentration would be given the
   # estimate of C_c
-  C_h = (staticIntegral + pastDynamicIntegral + pIntegrate(C_hIntegrandDynamicC, breaks, t = m$times[m$idx], m = m)$value) /
+  recentPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, breaks, t = m$times[m$idx], m = m)
+  C_h = (staticIntegral + pastDynamicIntegral + recentPostReleaseIntegral$value) /
     powerLawIntCCDF(m$tau_0, m$tau_n, m$tau_0, m$tau_n, m$alpha)
   # determine the error -- post release, the weighted mean of hyporheic conc and
   # channel conc should at all times be equal to final conc.
-  ((C_h*m$V_h + C_c*m$V_c)/m$V - m$C_final)^2
+  result <- ((C_h*m$V_h + C_c*m$V_c)/m$V - m$C_final)^2
+  if(debug) m$debug <- c(m$debug, c(list(type = "Optimize", ittr = m$idx), recentPostReleaseIntegral))
+  result
 }
 
 # Generate a ln()-distributed sequence from tau_0 to tau_n
@@ -297,7 +309,7 @@ pIntegrate = function(funs, breaks, ...) {
     ## end of function if length(breaks == 2)
   }
   pieces =
-    purrr::transpose(
+    purrr::list_transpose(
       mapply(
         integrate,
         lower = breaks[-length(breaks)],
