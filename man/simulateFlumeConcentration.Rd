@@ -4,7 +4,7 @@
 \alias{simulateFlumeConcentration}
 \title{Model a flume tracer release.}
 \usage{
-simulateFlumeConcentration(m)
+simulateFlumeConcentration(m, debug = F)
 }
 \arguments{
 \item{m}{An environment in which the follow variables have been defined:
@@ -43,26 +43,41 @@ simulateFlumeConcentration(m)
   about 15 is not likely to improve things.}
 
   }}
+
+\item{debug}{Control debugging output. The model relies substantially on
+numerical integration.  If \code{debug} is set to TRUE, the model will
+record the integration quality information for every numerical integration
+to a variable called \code{debug} in the model environment passed to
+\code{m}.  This will slow the model execution somewhat and is extremely
+verbose.}
 }
 \value{
 TRUE if executed successfully.
 
-As a side effect, the following values are added to the environment \code{m}:
+  As a side effect, the following values are added to the environment
+  \code{m}:
 
-\itemize{
+  \itemize{
 
-\item{\code{nIterations} The number of iterations executed by the model.}
+  \item{\code{nIterations} The number of iterations executed by the model.}
 
-\item{\code{times} The time values at the end of each iteration.  This variable is useful as an x-axis for plotting time series results.}
+  \item{\code{times} The time values at the end of each iteration.  This
+  variable is useful as an x-axis for plotting time series results.}
 
-\item{\code{nTimes} The length of any time series produced by the model (nIterations + 1, because initial conditions are include in all time series variables.}
+  \item{\code{nTimes} The length of any time series produced by the model
+  (nIterations + 1, because initial conditions are include in all time series
+  variables.}
 
-\item{\code{V_c} The volume of surface water (difference between V and V_h)}
+  \item{\code{V_c} The volume of surface water (difference between V and
+  V_h)}
 
-\item{\code{C_final} The expected final concentration in the flume; calculated as \code{(C_c*V_c + C_h*V_h) / V}}
+  \item{\code{C_final} The expected final concentration in the flume;
+  calculated as \code{(C_c*V_c + C_h*V_h) / V}}
 
-}
-Also, \code{C_c} is converted to a time series of length \code{nTimes}.
+  \item{\code{debug}} Information about the quality of numerical integrations
+  used in the model.  Only created if \code{debug} parameter is set to TRUE.
+
+  } Also, \code{C_c} is converted to a time series of length \code{nTimes}.
 }
 \description{
 Simulates conservative tracer concentration in an annular flume following a
@@ -111,18 +126,19 @@ m = new.env()
 
 # TIME parameters
 m$timestep = 0.5
-m$duration = 60
+m$duration = 60 #hours
 # Water age parameters
 m$alpha = 1.7
-m$tau_0 = 1/600
+m$tau_0 = 1/3600 #1 second
 m$tau_n = 60
-# Initial concentrations and volumes in channel and hyporehic zone.
+# Initial concentrations and volumes in channel and hyporheic zone.
 m$C_c = 10
 m$C_h = 5
 m$V = 1
 m$V_h = 0.5
 # Integration parameter.  See help for pIntegrate Function
-m$nSubdiv = 3
+# Set >1 if integration quality is problematic; slows the model.
+m$nSubdiv = 1
 
 #### RUN THE MODEL
 simulateFlumeConcentration(m)
