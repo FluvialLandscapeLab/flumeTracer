@@ -7,7 +7,7 @@
 simulateFlumeConcentration(m, debug = F)
 }
 \arguments{
-\item{m}{An environment in which the follow variables have been defined:
+\item{m}{An environment (often created with \code{\link{createFlume}}) in which the follow variables have been defined:
   \itemize{
 
   \item{\code{timestep} the time period each iteration of the model
@@ -121,25 +121,24 @@ that minimizes the squared difference between each side of the equality. See
 \code{\link{optimizationError}} for more details.
 }
 \examples{
-# create an environment to hold model parameters and model results
-m = new.env()
-
-# TIME parameters
-m$timestep = 0.5
-m$duration = 60 #hours
-# Water age parameters
-m$shape = "powerLaw"
-m$alpha = 1.4
-m$tau_0 = 1/3600 #1 second
-m$tau_n = 60
-# Initial concentrations and volumes in channel and hyporheic zone.
-m$C_c = 10
-m$C_h = 5
-m$V = 1
-m$V_h = 0.5
-# Integration parameter.  See help for pIntegrate Function
-# Set >1 if integration quality is problematic; slows the model.
-m$nSubdiv = 1
+m <- createFlume(
+  # TIME parameters
+  timestep = 0.5,
+  duration = 60, #hours
+  # Water age parameters
+  shape = "powerLaw",
+  alpha = 1.4,
+  tau_0 = 1/3600,
+  tau_n = 60,
+  # Initial concentrations and volumes in channel and hyporheic zone.
+  C_c = 10,
+  C_h = 5,
+  V = 1,
+  V_h = 0.5,
+  # Integration parameter.  See help for pIntegrate Function
+  # Set >1 if integration quality is problematic; slows the model.
+  nSubdiv = 1
+)
 
 #### RUN THE MODEL
 simulateFlumeConcentration(m)
@@ -147,6 +146,7 @@ simulateFlumeConcentration(m)
 # plot output
 plot(m$times, m$C_c, xlab = "Time (hours)", ylab = "Concentration")
 
-# Estimate of accuracy; smaller is better...
+# Assuming duration >= tau_n, compare simulated final conc to expected final conc
+# to estimate of accuracy of model; smaller difference is better...
 tail(m$C_c, 1) - m$C_final
 }

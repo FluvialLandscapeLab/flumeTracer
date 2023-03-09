@@ -2,6 +2,7 @@
 
 export(C_hIntegrandDynamicC)
 export(C_hIntegrandStaticC)
+export(createFlume)
 export(optimizationError)
 export(pIntegrate)
 export(simulateFlumeConcentration)

@@ -38,7 +38,7 @@
 #' at each time step of the model, the implicit solver finds the value of C_c
 #' that minimizes the squared difference between each side of the equality. See
 #' \code{\link{optimizationError}} for more details.
-#' @param m An environment in which the follow variables have been defined:
+#' @param m An environment (often created with \code{\link{createFlume}}) in which the follow variables have been defined:
 #'   \itemize{
 #'
 #'   \item{\code{timestep} the time period each iteration of the model
@@ -107,28 +107,24 @@
 #'
 #'   } Also, \code{C_c} is converted to a time series of length \code{nTimes}.
 #' @examples
-#' # create an environment to hold model parameters and model results
-#' m = new.env()
-#'
-#' # TIME parameters
-#' m$timestep = 0.5
-#' m$duration = 60 #hours
-
-#' # Water age parameters
-#' m$shape = "powerLaw"
-#' m$alpha = 1.4
-#' m$tau_0 = 1/3600 #1 second
-#' m$tau_n = 60
-
-#' # Initial concentrations and volumes in channel and hyporheic zone.
-#' m$C_c = 10
-#' m$C_h = 5
-#' m$V = 1
-#' m$V_h = 0.5
-
-#' # Integration parameter.  See help for pIntegrate Function
-#' # Set >1 if integration quality is problematic; slows the model.
-#' m$nSubdiv = 1
+#' m <- createFlume(
+#'   # TIME parameters
+#'   timestep = 0.5,
+#'   duration = 60, #hours
+#'   # Water age parameters
+#'   shape = "powerLaw",
+#'   alpha = 1.4,
+#'   tau_0 = 1/3600,
+#'   tau_n = 60,
+#'   # Initial concentrations and volumes in channel and hyporheic zone.
+#'   C_c = 10,
+#'   C_h = 5,
+#'   V = 1,
+#'   V_h = 0.5,
+#'   # Integration parameter.  See help for pIntegrate Function
+#'   # Set >1 if integration quality is problematic; slows the model.
+#'   nSubdiv = 1
+#' )
 #'
 #' #### RUN THE MODEL
 #' simulateFlumeConcentration(m)
@@ -136,13 +132,17 @@
 #' # plot output
 #' plot(m$times, m$C_c, xlab = "Time (hours)", ylab = "Concentration")
 #'
-#' # Estimate of accuracy; smaller is better...
+#' # Assuming duration >= tau_n, compare simulated final conc to expected final conc
+#' # to estimate of accuracy of model; smaller difference is better...
 #' tail(m$C_c, 1) - m$C_final
 #' @import hydrogeom
 #' @importFrom purrr list_transpose
 #' @importFrom stats approx integrate nlm
 #' @export
 simulateFlumeConcentration = function(m, debug = F) {
+
+  if(m$tau_0 <= 0 & m$shape == "powerLaw") stop("tau_0 must be > 0.")
+  if(m$tau_0 < 0) stop("tau_0 can't be < 0")
 
   # set up some values in the environment
   m$nIterations <- m$duration/m$timestep
@@ -383,4 +383,35 @@ pIntegrate = function(funs, breaks, ...) {
   )
 }
 
+#' Create a flume model environment
+#'
+#' Creates a flume model environment for use with
+#' \code{\link{simulateFlumeConcentration}}
+#'
+#' Pass named parameters to \code{...}.  Each parameter will be created as a
+#' variable of the same name in an environment.  Pass one parameter for each
+#' variable required by \code{\link{simulateFlumeConcentration}}. See
+#' \code{\link{simulateFlumeConcentration}} documentation for description of
+#' required parameters and see example under
+#' \code{\link{simulateFlumeConcentration}} for example of using
+#' \code{createFlume}
+#'
+#' @param ... Named parameter that will be used to create variable in an
+#'   environment returned to the user.
+#' @return An environment containing variables with names and values determined
+#'   by the parameters passed to \code{...}.
+#' @export
+createFlume <- function(...) {
+  m <- new.env()
+  params = list(...)
+  if(any(names(params) == "")) stop("All parameters must be named.")
+  mapply(
+    assign,
+    x = names(params),
+    value = params,
+    MoreArgs = list(envir = m)
+  )
+
+  m
+}
 
