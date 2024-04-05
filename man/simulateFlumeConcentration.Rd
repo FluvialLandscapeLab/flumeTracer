@@ -109,7 +109,7 @@ of the experimental release.
 
 At all times during the release, the following equality should hold:
 
-\code{C_final = (C_h_t * V_h + C_c_t * V_c)}
+\code{C_final = (C_h_t * V_h + C_c_t * V_c) / V}
 
 where "_t" designates a value at time (t) since the release. Importantly,
 \code{C_c} at the end of the current time step affects the history of

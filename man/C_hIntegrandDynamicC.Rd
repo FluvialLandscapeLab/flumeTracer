@@ -6,9 +6,9 @@
 \title{Integrands for determining the concentration of conservative tracer within
 the hyporeheic zone}
 \usage{
-C_hIntegrandDynamicC(tau, t, m)
+C_hIntegrandDynamicC(tau, t, m, funName)
 
-C_hIntegrandStaticC(tau, m)
+C_hIntegrandStaticC(tau, m, funName)
 }
 \arguments{
 \item{tau}{A vector of water ages for which remaining-flow-weighted
@@ -18,6 +18,11 @@ concentration is desired.}
 
 \item{m}{An model environment.  See \code{\link{simulateFlumeConcentration}}
 for details.}
+
+\item{funName}{Either "CCDF" or "PDF".  If "CCDF", the sum of the integrals
+of the C_hIntegrandDyanmic and C_hIntegrandStaticC will represent the mean
+concentration in the hyporheic zone.  If "PDF", the sum of the integrals
+will represent the upwelling concentration.}
 }
 \value{
 A vector of values representing past concentration weighted

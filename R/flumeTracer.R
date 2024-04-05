@@ -28,7 +28,7 @@
 #'
 #' At all times during the release, the following equality should hold:
 #'
-#' \code{C_final = (C_h_t * V_h + C_c_t * V_c)}
+#' \code{C_final = (C_h_t * V_h + C_c_t * V_c) / V}
 #'
 #' where "_t" designates a value at time (t) since the release. Importantly,
 #' \code{C_c} at the end of the current time step affects the history of
@@ -173,7 +173,7 @@ simulateFlumeConcentration = function(m, debug = F) {
       preReleaseIntegral <- list(value = 0)
     } else {
       preReleaseBreaks <- logDistributedBreaks(min(m$times[idx], m$tau_n), m$tau_n, m$nSubdiv)
-      preReleaseIntegral <- pIntegrate(C_hIntegrandStaticC, preReleaseBreaks, m = m)
+      preReleaseIntegral <- pIntegrate(C_hIntegrandStaticC, preReleaseBreaks, m = m, funName = "CCDF")
       if(debug) {
         m$debug = c(
           m$debug,
@@ -188,7 +188,7 @@ simulateFlumeConcentration = function(m, debug = F) {
       pastPostReleaseIntegral <- list(value = 0)
     } else {
       pastPostReleaseBreaks <- logDistributedBreaks(m$timestep, min(m$times[idx], m$tau_n), m$nSubdiv)
-      pastPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, pastPostReleaseBreaks, t = m$times[m$idx], m = m)
+      pastPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, pastPostReleaseBreaks, t = m$times[m$idx], m = m, funName = "CCDF")
       if(debug) {
         m$debug <- c(
           m$debug,
@@ -239,6 +239,10 @@ simulateFlumeConcentration = function(m, debug = F) {
 #' @param t Simulation time at which weighted concentration is desired
 #' @param m An model environment.  See \code{\link{simulateFlumeConcentration}}
 #'   for details.
+#' @param funName Either "CCDF" or "PDF".  If "CCDF", the sum of the integrals
+#'   of the C_hIntegrandDyanmic and C_hIntegrandStaticC will represent the mean
+#'   concentration in the hyporheic zone.  If "PDF", the sum of the integrals
+#'   will represent the upwelling concentration.
 #' @return A vector of values representing past concentration weighted
 #'   (multiplied) by the washout function:
 #'
@@ -261,15 +265,15 @@ simulateFlumeConcentration = function(m, debug = F) {
 #'   \code{C_hIntegrandDyanmic} should be integrated from \code{tau_0} to
 #'   \code{min(current model time, tau_n)}.
 #' @export
-C_hIntegrandDynamicC = function(tau, t, m){
-  m$CCDF(tau, m$tau_0, m$tau_n, m$shapeParam) * approx(m$times[1:length(m$C_c)], m$C_c, t-tau)$y #* e^(m$k_h*tau)
+C_hIntegrandDynamicC = function(tau, t, m, funName){
+  m[[funName]](tau, m$tau_0, m$tau_n, m$shapeParam) * approx(m$times[1:length(m$C_c)], m$C_c, t-tau)$y #* e^(m$k_h*tau)
 }
 
 #' @rdname  C_hIntegrandDynamicC
 #' @export
-C_hIntegrandStaticC = function(tau, m) {
+C_hIntegrandStaticC = function(tau, m, funName) {
   # m$C_h[1] is the concentration prior to release
-  m$CCDF(tau, m$tau_0, m$tau_n, m$shapeParam) * m$C_h[1] #* e^(m$k_h*tau)
+  m[[funName]](tau, m$tau_0, m$tau_n, m$shapeParam) * m$C_h[1] #* e^(m$k_h*tau)
 }
 
 
@@ -309,7 +313,7 @@ optimizationError <- function(C_c, m, breaks, staticIntegral, pastDynamicIntegra
   m$C_c[m$idx] <- C_c
   # determine what the current hyporheic concentration would be given the
   # estimate of C_c
-  recentPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, breaks, t = m$times[m$idx], m = m)
+  recentPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, breaks, t = m$times[m$idx], m = m, funName = "CCDF")
   C_h = (staticIntegral + pastDynamicIntegral + recentPostReleaseIntegral$value) /
     m$IntCCDF(m$tau_0, m$tau_n, m$tau_0, m$tau_n, m$shapeParam)
   # determine the error -- post release, the weighted mean of hyporheic conc and
@@ -415,3 +419,54 @@ createFlume <- function(...) {
   m
 }
 
+#' Post processing variables
+#'
+#' Add addtional hydrology descriptors by post-processing the model result.
+#'
+#' @param m Model environment that has been executed with
+#'   \code{\link{simulateFlumeConcentration}}
+#' @return Returns TRUE silently.  As a side effect, creates a \code{C_up} time series
+#' in the \code{m} environment representing the concentration of upwelling water.
+#' @export
+postProcess <- function(m) {
+  if(length(m$C_c) == 1) stop("You must execute the model before post processing.")
+
+  # create a few necessary values in m
+  m$PDF <- getFunction(paste0(m$shape, "PDF"))
+  PDFFormals <- names(formals(m$PDF))
+  m$shapeParam <- get(PDFFormals[length(PDFFormals)], envir = m)
+
+  m$C_up <-
+    sapply(
+      m$times,
+      function(t) {
+        # integrate the product of the PDF with the static (pre-release)
+        # concentration.  If t > tau_n, then the integration does not include
+        # a pre-release component
+        if(t > m$tau_n) {
+          preReleaseIntegral <- list(value = 0)
+        } else {
+          # otherwise integrate the PDF times pre-release concentration from t
+          # to tau_n.
+          preReleaseBreaks <- logDistributedBreaks(min(t, m$tau_n), m$tau_n, m$nSubdiv)
+          preReleaseIntegral <- pIntegrate(C_hIntegrandStaticC, preReleaseBreaks, m = m, funName = "PDF")
+        }
+        # if t = 0, the integration does not include a post-release component
+        if(t == 0.0) {
+          postReleaseIntegral <- list(value = 0)
+        } else {
+          # otherwise integrate the PDF times post-release (dynamic)
+          # concentration from 0 to t.
+          postReleaseBreaks <- logDistributedBreaks(0, min(t, m$tau_n), m$nSubdiv)
+          postReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, postReleaseBreaks, t = t, m = m, funName = "PDF")
+        }
+        # sum the part!  Voila!
+        preReleaseIntegral$value + postReleaseIntegral$value
+      }
+    )
+
+  # get rid of a few confusing things in the model environment.
+  rm(list = c("PDF", "shapeParam"), envir = m)
+
+  invisible(TRUE)
+}
