@@ -443,7 +443,7 @@ postProcess <- function(m) {
         # integrate the product of the PDF with the static (pre-release)
         # concentration.  If t > tau_n, then the integration does not include
         # a pre-release component
-        if(t > m$tau_n) {
+        if(t >= m$tau_n) {
           preReleaseIntegral <- list(value = 0)
         } else {
           # otherwise integrate the PDF times pre-release concentration from t
@@ -460,7 +460,7 @@ postProcess <- function(m) {
           postReleaseBreaks <- logDistributedBreaks(0, min(t, m$tau_n), m$nSubdiv)
           postReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, postReleaseBreaks, t = t, m = m, funName = "PDF")
         }
-        # sum the part!  Voila!
+        # sum the parts!  Voila!
         preReleaseIntegral$value + postReleaseIntegral$value
       }
     )
