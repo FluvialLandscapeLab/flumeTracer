@@ -429,44 +429,41 @@ createFlume <- function(...) {
 #' in the \code{m} environment representing the concentration of upwelling water.
 #' @export
 postProcess <- function(m) {
-  if(length(m$C_c) == 1) stop("You must execute the model before post processing.")
-
-  # create a few necessary values in m
+  if (length(m$C_c) == 1)
+    stop("You must execute the model before post processing.")
   m$PDF <- getFunction(paste0(m$shape, "PDF"))
   PDFFormals <- names(formals(m$PDF))
   m$shapeParam <- get(PDFFormals[length(PDFFormals)], envir = m)
-
-  m$C_up <-
-    sapply(
-      m$times,
-      function(t) {
-        # integrate the product of the PDF with the static (pre-release)
-        # concentration.  If t > tau_n, then the integration does not include
-        # a pre-release component
-        if(t >= m$tau_n) {
-          preReleaseIntegral <- list(value = 0)
-        } else {
-          # otherwise integrate the PDF times pre-release concentration from t
-          # to tau_n.
-          preReleaseBreaks <- logDistributedBreaks(min(t, m$tau_n), m$tau_n, m$nSubdiv)
-          preReleaseIntegral <- pIntegrate(C_hIntegrandStaticC, preReleaseBreaks, m = m, funName = "PDF")
-        }
-        # if t = 0, the integration does not include a post-release component
-        if(t == 0.0) {
-          postReleaseIntegral <- list(value = 0)
-        } else {
-          # otherwise integrate the PDF times post-release (dynamic)
-          # concentration from 0 to t.
-          postReleaseBreaks <- logDistributedBreaks(0, min(t, m$tau_n), m$nSubdiv)
-          postReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, postReleaseBreaks, t = t, m = m, funName = "PDF")
-        }
-        # sum the parts!  Voila!
-        preReleaseIntegral$value + postReleaseIntegral$value
+  m$C_up <- sapply(m$times, function(t) {
+    # print(t)
+    # if(t >= m$tau_n-0.1) {
+    #   print("yay")
+    # }
+    if (t >= m$tau_n) {
+      preReleaseIntegral <- list(value = 0)
+    }
+    else {
+      if(t == 0) {
+        preReleaseBreaks <- logDistributedBreaks(min(t + m$tau_0, m$tau_n),
+                                                 m$tau_n, m$nSubdiv)
+      } else {
+        preReleaseBreaks <- logDistributedBreaks(min(t, m$tau_n),
+                                                 m$tau_n, m$nSubdiv)
       }
-    )
-
-  # get rid of a few confusing things in the model environment.
+      preReleaseIntegral <- pIntegrate(C_hIntegrandStaticC,
+                                       preReleaseBreaks, m = m, funName = "PDF")
+    }
+    if (t == 0) {
+      postReleaseIntegral <- list(value = 0)
+    }
+    else {
+      postReleaseBreaks <- logDistributedBreaks(m$tau_0, min(t,
+                                                             m$tau_n), m$nSubdiv)
+      postReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC,
+                                        postReleaseBreaks, t = t, m = m, funName = "PDF")
+    }
+    preReleaseIntegral$value + postReleaseIntegral$value
+  })
   rm(list = c("PDF", "shapeParam"), envir = m)
-
   invisible(TRUE)
 }
