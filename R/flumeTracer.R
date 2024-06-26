@@ -432,51 +432,59 @@ postProcess <- function(m) {
   if (length(m$C_c) == 1)
     stop("You must execute the model before post processing.")
   m$PDF <- getFunction(paste0(m$shape, "PDF"))
+  m$CCDF <- getFunction(paste0(m$shape, "CCDF"))
+  m$IntCCDF <- getFunction(paste0(m$shape, "IntCCDF"))
   PDFFormals <- names(formals(m$PDF))
   m$shapeParam <- get(PDFFormals[length(PDFFormals)], envir = m)
-  m$C_up <- sapply(m$times, function(t) {
-    # print(t)
-    # if(t >= m$tau_n-0.1) {
-    #   print("yay")
-    # }
+  result <-
+    lapply(
+      c("PDF", "CCDF"),
+      function(integrandFun) {
+          sapply(m$times, function(t) {
+            # print(t)
+            # if(t >= m$tau_n-0.1) {
+            #   print("yay")
+            # }
 
-    # When t >= tau_n there is no longer a pre-release influence
-    if (t >= m$tau_n) {
-      preReleaseIntegral <- list(value = 0)
-    # Otherwise we calculate the pre-release influence.
-    } else {
-      # if t <= tau_0, then no solute has reached the HZ yet.  Therefore, the
-      # upwelling concentration must be the pre-release concentration, which
-      # will be returned C_hIntegrandStacticC when integrated from tau_0 to
-      # tau_n
-      if(t <= m$tau_0) {
-        preReleaseBreaks <- logDistributedBreaks(min(m$tau_0, m$tau_n),
-                                                 m$tau_n, m$nSubdiv)
-      # any other time, we integrate from t to tau because tau_n affects only
-      # the post release integral once t > tau_0
-      } else {
-        preReleaseBreaks <- logDistributedBreaks(min(t, m$tau_n),
-                                                 m$tau_n, m$nSubdiv)
-      }
-      # preReleaseBreaks now contains the limits of integration, so just
-      # integrate C_hIntegrandStaticC!
-      preReleaseIntegral <- pIntegrate(C_hIntegrandStaticC,
-                                       preReleaseBreaks, m = m, funName = "PDF")
-    }
+            # When t >= tau_n there is no longer a pre-release influence
+            if (t >= m$tau_n) {
+              preReleaseIntegral <- list(value = 0)
+              # Otherwise we calculate the pre-release influence.
+            } else {
+              # if t <= tau_0, then no solute has reached the HZ yet.  Therefore, the
+              # upwelling concentration must be the pre-release concentration, which
+              # will be returned C_hIntegrandStacticC when integrated from tau_0 to
+              # tau_n
+              if(t <= m$tau_0) {
+                preReleaseBreaks <- logDistributedBreaks(min(m$tau_0, m$tau_n),
+                                                         m$tau_n, m$nSubdiv)
+                # any other time, we integrate from t to tau because tau_n affects only
+                # the post release integral once t > tau_0
+              } else {
+                preReleaseBreaks <- logDistributedBreaks(min(t, m$tau_n),
+                                                         m$tau_n, m$nSubdiv)
+              }
+              # preReleaseBreaks now contains the limits of integration, so just
+              # integrate C_hIntegrandStaticC!
+              preReleaseIntegral <- pIntegrate(C_hIntegrandStaticC,
+                                               preReleaseBreaks, m = m, funName = integrandFun)
+            }
 
-    # for post release, if t <= tau_0 there is no post-release influence
-    # because, again, the salt hasn't reached the HZ
-    if (t <= m$tau_0) {
-      postReleaseIntegral <- list(value = 0)
-    # otherwise, integrate C_hIntegrandDynamicC from tan_0 to min(t, taU_n)
-    } else {
-      postReleaseBreaks <- logDistributedBreaks(m$tau_0, min(t,
-                                                             m$tau_n), m$nSubdiv)
-      postReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC,
-                                        postReleaseBreaks, t = t, m = m, funName = "PDF")
-    }
-    preReleaseIntegral$value + postReleaseIntegral$value
-  })
-  rm(list = c("PDF", "shapeParam"), envir = m)
+            # for post release, if t <= tau_0 there is no post-release influence
+            # because, again, the salt hasn't reached the HZ
+            if (t <= m$tau_0) {
+              postReleaseIntegral <- list(value = 0)
+              # otherwise, integrate C_hIntegrandDynamicC from tan_0 to min(t, taU_n)
+            } else {
+              postReleaseBreaks <- logDistributedBreaks(m$tau_0, min(t,
+                                                                     m$tau_n), m$nSubdiv)
+              postReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC,
+                                                postReleaseBreaks, t = t, m = m, funName = integrandFun)
+            }
+            preReleaseIntegral$value + postReleaseIntegral$value
+          })})
+  m$C_up <- result[[1]]
+  m$C_h <- result[[2]]/m$IntCCDF(m$tau_0, m$tau_n, m$tau_0, m$tau_n, m$shapeParam)
+  rm(list = c("PDF", "CCDF", "IntCCDF", "shapeParam"), envir = m)
   invisible(TRUE)
 }
