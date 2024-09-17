@@ -313,7 +313,8 @@ optimizationError <- function(C_c, m, breaks, staticIntegral, pastDynamicIntegra
   m$C_c[m$idx] <- C_c
   # determine what the current hyporheic concentration would be given the
   # estimate of C_c
-  recentPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, breaks, t = m$times[m$idx], m = m, funName = "CCDF")
+#  recentPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, breaks, t = m$times[m$idx], m = m, funName = "CCDF")
+  recentPostReleaseIntegral <- integrate(C_hIntegrandDynamicC, breaks[1], rev(breaks)[1], t = m$times[m$idx], m = m, funName = "CCDF")
   C_h = (staticIntegral + pastDynamicIntegral + recentPostReleaseIntegral$value) /
     m$IntCCDF(m$tau_0, m$tau_n, m$tau_0, m$tau_n, m$shapeParam)
   # determine the error -- post release, the weighted mean of hyporheic conc and
@@ -363,7 +364,7 @@ pIntegrate = function(funs, breaks, ...) {
     ## end of function if length(breaks == 2)
   }
   pieces =
-    purrr::list_transpose(
+#    purrr::list_transpose(
       mapply(
         integrate,
         lower = breaks[-length(breaks)],
@@ -373,14 +374,14 @@ pIntegrate = function(funs, breaks, ...) {
           ...
         ),
         SIMPLIFY = F
-      )
-    )[-5]
+      ) |> unlist()
+#    )[-5]
   structure(
     list(
-      value = sum(unlist(pieces[["value"]])),
-      abs.error = sum(unlist(pieces[["abs.error"]])),
-      subdivisions = unlist(pieces[["subdivisions"]]),
-      message = paste(unique(unlist(pieces[["message"]])), collapse = ", "),
+      value = sum(unlist(pieces[names(pieces) == "value"])),
+      abs.error = sum(unlist(pieces[names(pieces) == "abs.error"])),
+      subdivisions = unname(unlist(pieces[names(pieces) == "subdivisions"])),
+      message = paste(unique(unlist(pieces[names(pieces) == "message"])), collapse = ", "),
       call = "pIntegrate" #deparse(match.call())
     ),
     class = "integrate"
@@ -487,4 +488,13 @@ postProcess <- function(m) {
   m$C_h <- result[[2]]/m$IntCCDF(m$tau_0, m$tau_n, m$tau_0, m$tau_n, m$shapeParam)
   rm(list = c("PDF", "CCDF", "IntCCDF", "shapeParam"), envir = m)
   invisible(TRUE)
+}
+
+
+well_mixed_hz <- function(t, y, parms) {
+
+  dC_c <- (y["C_h"] - y["C_c"]) * parms["q_up"] / parms["D_c"]
+  dC_h <- (y["C_c"] - y["C_h"]) * parms["q_up"] / parms["D_h"]
+
+  list(c(dC_c, dC_h))
 }
