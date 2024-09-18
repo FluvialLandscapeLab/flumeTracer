@@ -167,8 +167,12 @@ simulateFlumeConcentration = function(m, debug = F) {
   for(idx in 2:m$nTimes) {
     m$idx <- idx
 
-    # calculate the integral for any t-tau that is less than zero. (this is
-    # constant for the time step)
+    # Calculate the integral for any t-tau that is less than zero. Conceptually,
+    # this is the CCDF but with the x axis flipped and the area of integration
+    # is from integration from t=0 into the past to -(tau_n - t).  Now
+    # distribute the `-` sign to see this range is the same as from the current
+    # t - tau_n.  This integral is constant for the time step, so we only do it
+    # here once.
     if(m$times[idx] > m$tau_n) {
       preReleaseIntegral <- list(value = 0)
     } else {
@@ -182,8 +186,10 @@ simulateFlumeConcentration = function(m, debug = F) {
       }
     }
 
-    # calculate integral for any t-tau that is between zero and last time step
-    # (this is constant for the time step)
+    # calculate integral for any t-tau that is between zero, forward to previous
+    # time step. Again, think about the flipped CCDF.  This would be the area of
+    # the flipped CCDF from the last time step backwards to zero. Again, this is
+    # constant for the time step.
     if(idx == 2) {
       pastPostReleaseIntegral <- list(value = 0)
     } else {
