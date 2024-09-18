@@ -87,13 +87,13 @@
 #'
 #'   \itemize{
 #'
-#'   \item{\code{nIterations} The number of iterations executed by the model.}
+#'   \item{\code{n_iterations} The number of iterations executed by the model.}
 #'
 #'   \item{\code{times} The time values at the end of each iteration.  This
 #'   variable is useful as an x-axis for plotting time series results.}
 #'
 #'   \item{\code{nTimes} The length of any time series produced by the model
-#'   (nIterations + 1, because initial conditions are include in all time series
+#'   (n_iterations + 1, because initial conditions are include in all time series
 #'   variables.}
 #'
 #'   \item{\code{V_c} The volume of surface water (difference between V and
@@ -145,8 +145,8 @@ simulateFlumeConcentration = function(m, debug = F) {
   if(m$tau_0 < 0) stop("tau_0 can't be < 0")
 
   # set up some values in the environment
-  m$nIterations <- m$duration/m$timestep
-  m$times <- seq(0, m$duration, length.out = m$nIterations+1)
+  # m$n_iterations <- m$duration/m$timestep
+  m$times <- make_times(m$n_iterations, m$duration, m$step_exponent) #seq(0, m$duration, length.out = m$n_iterations+1)
   m$nTimes <- length(m$times)
 
   # Expected final concentration.
@@ -188,7 +188,10 @@ simulateFlumeConcentration = function(m, debug = F) {
       pastPostReleaseIntegral <- list(value = 0)
     } else {
       pastPostReleaseBreaks <- logDistributedBreaks(m$timestep, min(m$times[idx], m$tau_n), m$nSubdiv)
-      pastPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, pastPostReleaseBreaks, t = m$times[m$idx], m = m, funName = "CCDF")
+      #m$approxConc <- approxfun(m$times[1:length(m$C_c)], m$C_c)
+      pastPostReleaseIntegral <-
+        pIntegrate(C_hIntegrandDynamicC, pastPostReleaseBreaks,
+                   t = m$times[m$idx], m = m, funName = "CCDF") #, approxFun = "approxConc")
       if(debug) {
         m$debug <- c(
           m$debug,
@@ -199,7 +202,7 @@ simulateFlumeConcentration = function(m, debug = F) {
 
     # calculate breaks for the "recent" interval (between last and current time
     # step, which needs to be optimized)
-    recentPostReleaseBreaks <- logDistributedBreaks(m$tau_0, m$timestep, m$nSubdiv)
+    recentPostReleaseBreaks <- logDistributedBreaks(m$tau_0, m$times[idx]-m$times[idx-1], m$nSubdiv)
 
     # calculate the new concentration by descending on solution
     m$C_c[idx] <-
@@ -266,7 +269,24 @@ simulateFlumeConcentration = function(m, debug = F) {
 #'   \code{min(current model time, tau_n)}.
 #' @export
 C_hIntegrandDynamicC = function(tau, t, m, funName){
-  m[[funName]](tau, m$tau_0, m$tau_n, m$shapeParam) * approx(m$times[1:length(m$C_c)], m$C_c, t-tau)$y #* e^(m$k_h*tau)
+  #m[[funName]](tau, m$tau_0, m$tau_n, m$shapeParam) * approx(m$times[1:length(m$C_c)], m$C_c, t-tau)$y
+  #if(any(round(approx(m$times[1:length(m$C_c)], m$C_c, t-tau)$y, 5) !=
+  #   round(quick_approx(m$times[1:length(m$C_c)], m$C_c, t-tau), 5))) {
+  #  quick_approx(m$times[1:length(m$C_c)], m$C_c, t-tau)
+  #}
+
+  m[[funName]](tau, m$tau_0, m$tau_n, m$shapeParam) * approx(m$times[1:length(m$C_c)], m$C_c, t-tau)$y  #* e^(m$k_h*tau)
+}
+
+quick_approx <- function(x, y, x_vals) {
+  idx <-
+    .colSums(
+      rep(x_vals, each = length(x)) >= x,
+      length(x),
+      length(x_vals))
+  frac <- (x_vals - x[idx])/(x[idx+1]-x[idx])
+
+  y[idx] + (y[idx+1] - y[idx])*frac
 }
 
 #' @rdname  C_hIntegrandDynamicC
@@ -313,8 +333,11 @@ optimizationError <- function(C_c, m, breaks, staticIntegral, pastDynamicIntegra
   m$C_c[m$idx] <- C_c
   # determine what the current hyporheic concentration would be given the
   # estimate of C_c
-#  recentPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, breaks, t = m$times[m$idx], m = m, funName = "CCDF")
-  recentPostReleaseIntegral <- integrate(C_hIntegrandDynamicC, breaks[1], rev(breaks)[1], t = m$times[m$idx], m = m, funName = "CCDF")
+  #  recentPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, breaks, t = m$times[m$idx], m = m, funName = "CCDF")
+
+  recentPostReleaseIntegral <-
+    integrate(C_hIntegrandDynamicC, breaks[1], rev(breaks)[1],
+              t = m$times[m$idx], m = m, funName = "CCDF") #, approxFun = "approxConc")
   C_h = (staticIntegral + pastDynamicIntegral + recentPostReleaseIntegral$value) /
     m$IntCCDF(m$tau_0, m$tau_n, m$tau_0, m$tau_n, m$shapeParam)
   # determine the error -- post release, the weighted mean of hyporheic conc and
@@ -364,18 +387,18 @@ pIntegrate = function(funs, breaks, ...) {
     ## end of function if length(breaks == 2)
   }
   pieces =
-#    purrr::list_transpose(
-      mapply(
-        integrate,
-        lower = breaks[-length(breaks)],
-        upper = breaks[-1],
-        f = funs,
-        MoreArgs = list(
-          ...
-        ),
-        SIMPLIFY = F
-      ) |> unlist()
-#    )[-5]
+    #    purrr::list_transpose(
+    mapply(
+      integrate,
+      lower = breaks[-length(breaks)],
+      upper = breaks[-1],
+      f = funs,
+      MoreArgs = list(
+        ...
+      ),
+      SIMPLIFY = F
+    ) |> unlist()
+  #    )[-5]
   structure(
     list(
       value = sum(unlist(pieces[names(pieces) == "value"])),
@@ -441,49 +464,49 @@ postProcess <- function(m) {
     lapply(
       c("PDF", "CCDF"),
       function(integrandFun) {
-          sapply(m$times, function(t) {
-            # print(t)
-            # if(t >= m$tau_n-0.1) {
-            #   print("yay")
-            # }
+        sapply(m$times, function(t) {
+          # print(t)
+          # if(t >= m$tau_n-0.1) {
+          #   print("yay")
+          # }
 
-            # When t >= tau_n there is no longer a pre-release influence
-            if (t >= m$tau_n) {
-              preReleaseIntegral <- list(value = 0)
-              # Otherwise we calculate the pre-release influence.
+          # When t >= tau_n there is no longer a pre-release influence
+          if (t >= m$tau_n) {
+            preReleaseIntegral <- list(value = 0)
+            # Otherwise we calculate the pre-release influence.
+          } else {
+            # if t <= tau_0, then no solute has reached the HZ yet.  Therefore, the
+            # upwelling concentration must be the pre-release concentration, which
+            # will be returned C_hIntegrandStacticC when integrated from tau_0 to
+            # tau_n
+            if(t <= m$tau_0) {
+              preReleaseBreaks <- logDistributedBreaks(min(m$tau_0, m$tau_n),
+                                                       m$tau_n, m$nSubdiv)
+              # any other time, we integrate from t to tau because tau_n affects only
+              # the post release integral once t > tau_0
             } else {
-              # if t <= tau_0, then no solute has reached the HZ yet.  Therefore, the
-              # upwelling concentration must be the pre-release concentration, which
-              # will be returned C_hIntegrandStacticC when integrated from tau_0 to
-              # tau_n
-              if(t <= m$tau_0) {
-                preReleaseBreaks <- logDistributedBreaks(min(m$tau_0, m$tau_n),
-                                                         m$tau_n, m$nSubdiv)
-                # any other time, we integrate from t to tau because tau_n affects only
-                # the post release integral once t > tau_0
-              } else {
-                preReleaseBreaks <- logDistributedBreaks(min(t, m$tau_n),
-                                                         m$tau_n, m$nSubdiv)
-              }
-              # preReleaseBreaks now contains the limits of integration, so just
-              # integrate C_hIntegrandStaticC!
-              preReleaseIntegral <- pIntegrate(C_hIntegrandStaticC,
-                                               preReleaseBreaks, m = m, funName = integrandFun)
+              preReleaseBreaks <- logDistributedBreaks(min(t, m$tau_n),
+                                                       m$tau_n, m$nSubdiv)
             }
+            # preReleaseBreaks now contains the limits of integration, so just
+            # integrate C_hIntegrandStaticC!
+            preReleaseIntegral <- pIntegrate(C_hIntegrandStaticC,
+                                             preReleaseBreaks, m = m, funName = integrandFun)
+          }
 
-            # for post release, if t <= tau_0 there is no post-release influence
-            # because, again, the salt hasn't reached the HZ
-            if (t <= m$tau_0) {
-              postReleaseIntegral <- list(value = 0)
-              # otherwise, integrate C_hIntegrandDynamicC from tan_0 to min(t, taU_n)
-            } else {
-              postReleaseBreaks <- logDistributedBreaks(m$tau_0, min(t,
-                                                                     m$tau_n), m$nSubdiv)
-              postReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC,
-                                                postReleaseBreaks, t = t, m = m, funName = integrandFun)
-            }
-            preReleaseIntegral$value + postReleaseIntegral$value
-          })})
+          # for post release, if t <= tau_0 there is no post-release influence
+          # because, again, the salt hasn't reached the HZ
+          if (t <= m$tau_0) {
+            postReleaseIntegral <- list(value = 0)
+            # otherwise, integrate C_hIntegrandDynamicC from tan_0 to min(t, taU_n)
+          } else {
+            postReleaseBreaks <- logDistributedBreaks(m$tau_0, min(t,
+                                                                   m$tau_n), m$nSubdiv)
+            postReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC,
+                                              postReleaseBreaks, t = t, m = m, funName = integrandFun)
+          }
+          preReleaseIntegral$value + postReleaseIntegral$value
+        })})
   m$C_up <- result[[1]]
   m$C_h <- result[[2]]/m$IntCCDF(m$tau_0, m$tau_n, m$tau_0, m$tau_n, m$shapeParam)
   rm(list = c("PDF", "CCDF", "IntCCDF", "shapeParam"), envir = m)
@@ -497,4 +520,9 @@ well_mixed_hz <- function(t, y, parms) {
   dC_h <- (y["C_c"] - y["C_h"]) * parms["q_up"] / parms["D_h"]
 
   list(c(dC_c, dC_h))
+}
+
+make_times <- function(n_steps, end_time, exponent) {
+  distribution <- (0:n_steps)^exponent
+  distribution/max(distribution) * end_time
 }
