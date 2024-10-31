@@ -9,7 +9,7 @@
 #'   will be included in the fit.
 #' @param obs_times A vector of times where concentration values were observed.
 #' @param obs_C_c A vetor of observed concentration values
-#' @param m An environment describing a flume.  See \code{\link{createFlume}.
+#' @param m An environment describing a flume.  See \code{\link{createFlume}}.
 #' @param lower,upper A vector of lower and upper boundaries for par values.
 #'   See "L-BFGS-B" method for \code{\link{optim}}, which is used for parameter
 #'   estimates.
