@@ -38,13 +38,18 @@
 #' at each time step of the model, the implicit solver finds the value of C_c
 #' that minimizes the squared difference between each side of the equality. See
 #' \code{\link{optimizationError}} for more details.
-#' @param m An environment (often created with \code{\link{createFlume}}) in which the follow variables have been defined:
+#' @param m An environment (often created with \code{\link{createFlume}}) in
+#'   which the follow variables have been defined:
 #'   \itemize{
 #'
-#'   \item{\code{timestep} the time period each iteration of the model
-#'   represents}
-#'
 #'   \item{\code{duration} the total duration of the simulation}
+#'
+#'   \item{\code{n_iterations} the number of iterations (time steps) to include in the model run}
+#'
+#'   \item{\code{evenness} An value that controls the increase in time step as the model executes.
+#'   evenness = 1 creates equal sized time steps.  Increase value to weight more time steps toward
+#'   the beginning of the model run.  Reasonable evenness values range from 1 to about 15. Values of 6-10
+#'   seem yield excellent representation of results with minimum time steps and therefore greater execution speed.}
 #'
 #'   \item{\code{tau_0} the minimum water age in the hyporheic zone}
 #'
@@ -92,7 +97,7 @@
 #'   \item{\code{times} The time values at the end of each iteration.  This
 #'   variable is useful as an x-axis for plotting time series results.}
 #'
-#'   \item{\code{nTimes} The length of any time series produced by the model
+#'   \item{\code{n_times} The length of any time series produced by the model
 #'   (n_iterations + 1, because initial conditions are include in all time series
 #'   variables.}
 #'
@@ -105,7 +110,7 @@
 #'   \item{\code{debug}} Information about the quality of numerical integrations
 #'   used in the model.  Only created if \code{debug} parameter is set to TRUE.
 #'
-#'   } Also, \code{C_c} is converted to a time series of length \code{nTimes}.
+#'   } Also, \code{C_c} is converted to a time series of length \code{n_times}.
 #' @examples
 #' m <- createFlume(
 #'   # TIME parameters
@@ -146,8 +151,11 @@ simulateFlumeConcentration = function(m, debug = F) {
 
   # set up some values in the environment
   # m$n_iterations <- m$duration/m$timestep
-  m$times <- make_times(m$n_iterations, m$duration, m$step_exponent) #seq(0, m$duration, length.out = m$n_iterations+1)
-  m$nTimes <- length(m$times)
+  m$times <- make_times(m) #seq(0, m$duration, length.out = m$n_iterations+1)
+  m$n_times <- length(m$times)
+
+#  if(any(diff(m$times) > (m$tau_n - m$tau_0)/2))
+#    stop("Max time step (", max(diff(m$times)), ") is greater than 1/2*(tau_n-tau_0).  Reduce evenness or increase n_iterations.")
 
   # Expected final concentration.
   m$V_c <- m$V - m$V_h
@@ -164,7 +172,7 @@ simulateFlumeConcentration = function(m, debug = F) {
 
   #   index 1 when is t=0.  We already have all values for t=0, so we start
   # calculations with index 2.
-  for(idx in 2:m$nTimes) {
+  for(idx in 2:m$n_times) {
     m$idx <- idx
 
     # calculate the integral for any t-tau that is less than zero. (this is
@@ -187,7 +195,7 @@ simulateFlumeConcentration = function(m, debug = F) {
     if(idx == 2) {
       pastPostReleaseIntegral <- list(value = 0)
     } else {
-      pastPostReleaseBreaks <- logDistributedBreaks(m$timestep, min(m$times[idx], m$tau_n), m$nSubdiv)
+      pastPostReleaseBreaks <- logDistributedBreaks(m$times[idx]-m$times[idx-1], min(m$times[idx], m$tau_n), m$nSubdiv)
       #m$approxConc <- approxfun(m$times[1:length(m$C_c)], m$C_c)
       pastPostReleaseIntegral <-
         pIntegrate(C_hIntegrandDynamicC, pastPostReleaseBreaks,
@@ -278,17 +286,6 @@ C_hIntegrandDynamicC = function(tau, t, m, funName){
   m[[funName]](tau, m$tau_0, m$tau_n, m$shapeParam) * approx(m$times[1:length(m$C_c)], m$C_c, t-tau)$y  #* e^(m$k_h*tau)
 }
 
-quick_approx <- function(x, y, x_vals) {
-  idx <-
-    .colSums(
-      rep(x_vals, each = length(x)) >= x,
-      length(x),
-      length(x_vals))
-  frac <- (x_vals - x[idx])/(x[idx+1]-x[idx])
-
-  y[idx] + (y[idx+1] - y[idx])*frac
-}
-
 #' @rdname  C_hIntegrandDynamicC
 #' @export
 C_hIntegrandStaticC = function(tau, m, funName) {
@@ -335,9 +332,14 @@ optimizationError <- function(C_c, m, breaks, staticIntegral, pastDynamicIntegra
   # estimate of C_c
   #  recentPostReleaseIntegral <- pIntegrate(C_hIntegrandDynamicC, breaks, t = m$times[m$idx], m = m, funName = "CCDF")
 
-  recentPostReleaseIntegral <-
-    integrate(C_hIntegrandDynamicC, breaks[1], rev(breaks)[1],
-              t = m$times[m$idx], m = m, funName = "CCDF") #, approxFun = "approxConc")
+  if(m$nSubdiv == 1)
+     recentPostReleaseIntegral <-
+       integrate(C_hIntegrandDynamicC, breaks[1], rev(breaks)[1],
+                 t = m$times[m$idx], m = m, funName = "CCDF") #, approxFun = "approxConc")
+   else
+    recentPostReleaseIntegral <-
+      pIntegrate(C_hIntegrandDynamicC, breaks,
+               t = m$times[m$idx], m = m, funName = "CCDF") #, approxFun = "approxConc")
   C_h = (staticIntegral + pastDynamicIntegral + recentPostReleaseIntegral$value) /
     m$IntCCDF(m$tau_0, m$tau_n, m$tau_0, m$tau_n, m$shapeParam)
   # determine the error -- post release, the weighted mean of hyporheic conc and
@@ -522,7 +524,16 @@ well_mixed_hz <- function(t, y, parms) {
   list(c(dC_c, dC_h))
 }
 
-make_times <- function(n_steps, end_time, exponent) {
-  distribution <- (0:n_steps)^exponent
-  distribution/max(distribution) * end_time
+make_times <- function(m) {
+  if(m$evenness < 1) stop("Evenness value must be >= 1. (Evenness = 1 yields regular time steps.)")
+  if(m$evenness == 1) {
+    times <- seq(0, m$duration, length.out = m$n_iterations)
+  } else {
+    distribution <- exp(seq(0, m$evenness-1, length.out = m$n_iterations+1)) - 1
+    times <- distribution/max(distribution) * m$duration
+  }
+  if(times[2] < m$tau_0)
+    stop("First time step (", times[2], ") is less than tau_0. \n",
+         "  Decrease tau_0 or adjust n_interation or evenness to create larger initial timesteps.")
+  times
 }

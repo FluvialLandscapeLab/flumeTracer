@@ -3,6 +3,7 @@
 export(C_hIntegrandDynamicC)
 export(C_hIntegrandStaticC)
 export(createFlume)
+export(fitFlume)
 export(optimizationError)
 export(pIntegrate)
 export(postProcess)

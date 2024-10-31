@@ -7,13 +7,18 @@
 simulateFlumeConcentration(m, debug = F)
 }
 \arguments{
-\item{m}{An environment (often created with \code{\link{createFlume}}) in which the follow variables have been defined:
+\item{m}{An environment (often created with \code{\link{createFlume}}) in
+  which the follow variables have been defined:
   \itemize{
 
-  \item{\code{timestep} the time period each iteration of the model
-  represents}
-
   \item{\code{duration} the total duration of the simulation}
+
+  \item{\code{n_iterations} the number of iterations (time steps) to include in the model run}
+
+  \item{\code{evenness} An value that controls the increase in time step as the model executes.
+  evenness = 1 creates equal sized time steps.  Increase value to weight more time steps toward
+  the beginning of the model run.  Reasonable evenness values range from 1 to about 15. Values of 6-10
+  seem yield excellent representation of results with minimum time steps and therefore greater execution speed.}
 
   \item{\code{tau_0} the minimum water age in the hyporheic zone}
 
@@ -59,13 +64,13 @@ TRUE if executed successfully.
 
   \itemize{
 
-  \item{\code{nIterations} The number of iterations executed by the model.}
+  \item{\code{n_iterations} The number of iterations executed by the model.}
 
   \item{\code{times} The time values at the end of each iteration.  This
   variable is useful as an x-axis for plotting time series results.}
 
-  \item{\code{nTimes} The length of any time series produced by the model
-  (nIterations + 1, because initial conditions are include in all time series
+  \item{\code{n_times} The length of any time series produced by the model
+  (n_iterations + 1, because initial conditions are include in all time series
   variables.}
 
   \item{\code{V_c} The volume of surface water (difference between V and
@@ -77,7 +82,7 @@ TRUE if executed successfully.
   \item{\code{debug}} Information about the quality of numerical integrations
   used in the model.  Only created if \code{debug} parameter is set to TRUE.
 
-  } Also, \code{C_c} is converted to a time series of length \code{nTimes}.
+  } Also, \code{C_c} is converted to a time series of length \code{n_times}.
 }
 \description{
 Simulates conservative tracer concentration in an annular flume following a
