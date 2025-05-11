@@ -144,10 +144,12 @@
 #' @importFrom purrr list_transpose
 #' @importFrom stats approx integrate nlm
 #' @export
-simulateFlumeConcentration = function(m, debug = F) {
+simulateFlumeConcentration <- function(m, debug = F) {
 
   if(m$tau_0 <= 0 & m$shape == "powerLaw") stop("tau_0 must be > 0.")
   if(m$tau_0 < 0) stop("tau_0 can't be < 0")
+  # TODO: See TODO in C_hIntegrandDynamicC function
+  if(any(m$times < m$tau_0)) stop("Your time step is too small.  Solution times must be greater than tau_0.")
 
   # set up some values in the environment
   # m$n_iterations <- m$duration/m$timestep
@@ -282,13 +284,19 @@ simulateFlumeConcentration = function(m, debug = F) {
 #'   \code{C_hIntegrandDyanmic} should be integrated from \code{tau_0} to
 #'   \code{min(current model time, tau_n)}.
 #' @export
-C_hIntegrandDynamicC = function(tau, t, m, funName){
+C_hIntegrandDynamicC <- function(tau, t, m, funName){
   #m[[funName]](tau, m$tau_0, m$tau_n, m$shapeParam) * approx(m$times[1:length(m$C_c)], m$C_c, t-tau)$y
   #if(any(round(approx(m$times[1:length(m$C_c)], m$C_c, t-tau)$y, 5) !=
   #   round(quick_approx(m$times[1:length(m$C_c)], m$C_c, t-tau), 5))) {
   #  quick_approx(m$times[1:length(m$C_c)], m$C_c, t-tau)
   #}
 
+  # TODO: When t is less than tau_0, t - tau_0 is negative and the approx
+  # returns an NA, causing crashes.  Right now there is just a check at the
+  # beginning of simulateFlumeConcentration that makes sure the time step is not
+  # too small so that t[2] is always > tau_0.  This could be fixed, I think to
+  # allow the approx to return the pre-salt release concentration.  However,
+  # this might destabilize the integration...
   m[[funName]](tau, m$tau_0, m$tau_n, m$shapeParam) * approx(m$times[1:length(m$C_c)], m$C_c, t-tau)$y  #* e^(m$k_h*tau)
 }
 
