@@ -365,7 +365,10 @@ optimizationError <- function(C_c, m, breaks, staticIntegral, pastDynamicIntegra
 
 # Generate a ln()-distributed sequence from tau_0 to tau_n
 logDistributedBreaks = function(tau_0, tau_n, nBins){
-  exp(seq(log(tau_0 + 1), log(tau_n + 1), length.out = nBins+1)) - 1
+  result <- exp(seq(log(tau_0 + 1), log(tau_n + 1), length.out = nBins+1)) - 1
+  result[1] <- tau_0
+  result[length(result)] <- tau_n
+  result
 }
 
 #' Numerical integration with manual subdivisons.
